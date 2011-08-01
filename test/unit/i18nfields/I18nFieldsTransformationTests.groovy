@@ -109,8 +109,10 @@ class I18nFieldsTransformationTests {
 
 	@Test
 	void "Adds nullable constraint to localized fields if original is nullable"() {
-		// No sé cómo testear esto
-		fail()
+        def tester = new ConstraintsTester()
+        def constraints = chuchu.constraints
+        def constraintsMethods = tester.test(constraints)
+		assertThat constraintsMethods.name_es?.nullable, is(true)
 	}
 
 	private def createBlabla() {

@@ -181,12 +181,12 @@ public class I18nFieldsTransformation implements ASTTransformation {
 		def body = closure.getCode()
 		def statements = body.getStatements()
 		return statements.find { statement ->
-			return containsAMethodCallExpression(statement) && field == statement.getExpression().getMethodAsString()
+			containsAMethodCallExpression(statement) && field == statement.getExpression().getMethodAsString()
 		}
 	}
 
 	private boolean containsAMethodCallExpression(Statement statement) {
-		return statement instanceof ExpressionStatement && statement.getExpression() instanceof MethodCallExpression
+		statement instanceof ExpressionStatement && statement.getExpression() instanceof MethodCallExpression
 	}
 
 	private void makeFieldTransient(String field, ClassNode classNode) {

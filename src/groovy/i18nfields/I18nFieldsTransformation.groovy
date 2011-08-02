@@ -22,10 +22,18 @@ import org.codehaus.groovy.ast.MethodNode
 import org.codehaus.groovy.ast.ClassHelper
 import org.codehaus.groovy.ast.expr.MapExpression
 
+import org.codehaus.groovy.ast.expr.Expression
+
+import org.codehaus.groovy.ast.stmt.Statement
+
+import org.codehaus.groovy.ast.stmt.ExpressionStatement
+import org.codehaus.groovy.ast.expr.MethodCallExpression
+
 @GroovyASTTransformation(phase = CompilePhase.CANONICALIZATION)
 public class I18nFieldsTransformation implements ASTTransformation {
 	public static final String I18N_FIELDS_DEFINITION_FIELD_NAME = "i18n_fields"
 	public static final String TRANSIENTS_DEFINITION_FIELD_NAME = "transients"
+	public static final String CONSTRAINTS_DEFINITION_FIELD_NAME = "constraints"
 	public static final String LOCALES_DEFINITION_FIELD_NAME = "locales"
 
 	void visit(ASTNode[] astNodes, SourceUnit sourceUnit) {
@@ -75,6 +83,8 @@ public class I18nFieldsTransformation implements ASTTransformation {
 		for (locale in locales) {
 			def fieldName = "${field}_${locale}"
 			addI18nField(fieldName, classNode)
+			if (hasConstraintsField(classNode))
+				copyConstraints(field, fieldName, classNode)
 		}
 	}
 
@@ -121,10 +131,7 @@ public class I18nFieldsTransformation implements ASTTransformation {
 		mapEntryExpressions.each {
 			localesFieldMap.addMapEntryExpression(new ConstantExpression(it.key), it.value)
 		}
-		def localesField = new FieldNode(LOCALES_DEFINITION_FIELD_NAME, ACC_PUBLIC | ACC_STATIC, new ClassNode(Object.class), classNode, localesFieldMap)
-		// TODO: Use log4j
-		println "[i18n_fields] Adding locales static field to ${classNode.name}"
-		classNode.addField(localesField)
+		addStaticField(LOCALES_DEFINITION_FIELD_NAME, localesFieldMap, classNode)
 	}
 
 	private def getLocale(localeString) {
@@ -142,17 +149,64 @@ public class I18nFieldsTransformation implements ASTTransformation {
 		classNode.addProperty(fieldName, Modifier.PUBLIC, new ClassNode(String.class), new ConstantExpression(null), null, null)
 	}
 
+	private void copyConstraints(String fromField, String toField, ClassNode classNode) {
+		if (!hasConstraintForField(toField, classNode) && hasConstraintForField(fromField, classNode))
+			copyAndAddConstraint(fromField, toField, classNode)
+	}
+
+	private def copyAndAddConstraint(String fromField, String toField, ClassNode classNode) {
+		def constraint = getConstraintForField(fromField, classNode)
+		def newConstraint = copyAndRenameConstraint(toField, constraint)
+		addConstraint(newConstraint, classNode)
+	}
+
+	private boolean hasConstraintForField(String field, ClassNode classNode) {
+		return null != getConstraintForField(field, classNode)
+	}
+
+	private def addConstraint(ExpressionStatement newConstraint, ClassNode classNode) {
+		def closure = getConstraintsField(classNode).getInitialExpression()
+		def body = closure.getCode()
+		body.addStatement(newConstraint)
+	}
+
+	private ExpressionStatement copyAndRenameConstraint(String toField, ExpressionStatement constraint) {
+		def baseMethodCall = constraint.getExpression()
+		def methodCall = new MethodCallExpression(baseMethodCall.getObjectExpression(), toField, baseMethodCall.getArguments())
+		return new ExpressionStatement(methodCall)
+	}
+
+	private Statement getConstraintForField(String field, ClassNode classNode) {
+		def closure = getConstraintsField(classNode).getInitialExpression()
+		def body = closure.getCode()
+		def statements = body.getStatements()
+		return statements.find { statement ->
+			return containsAMethodCallExpression(statement) && field == statement.getExpression().getMethodAsString()
+		}
+	}
+
+	private boolean containsAMethodCallExpression(Statement statement) {
+		return statement instanceof ExpressionStatement && statement.getExpression() instanceof MethodCallExpression
+	}
+
 	private void makeFieldTransient(String field, ClassNode classNode) {
-		FieldNode transientsField = getTransientsField(classNode)
-		ListExpression transientFieldList = transientsField.getInitialExpression()
+		def transientFieldList = getOrCreateTransientsField(classNode).getInitialExpression()
 		// TODO: Use log4j
 		println "[i18n_fields] Making '${field}' field of class ${classNode.name} transient"
 		transientFieldList.addExpression(new ConstantExpression(field))
 	}
 
-	private FieldNode getTransientsField(ClassNode classNode) {
+	private boolean hasConstraintsField(ClassNode classNode) {
+		return fieldExists(CONSTRAINTS_DEFINITION_FIELD_NAME, classNode)
+	}
+
+	private FieldNode getConstraintsField(ClassNode classNode) {
+		return classNode.getDeclaredField(CONSTRAINTS_DEFINITION_FIELD_NAME)
+	}
+
+	private FieldNode getOrCreateTransientsField(ClassNode classNode) {
 		if (!fieldExists(TRANSIENTS_DEFINITION_FIELD_NAME, classNode)) {
-			addTransientsField(classNode)
+			addStaticField(TRANSIENTS_DEFINITION_FIELD_NAME, new ListExpression(), classNode)
 		}
 		return classNode.getDeclaredField(TRANSIENTS_DEFINITION_FIELD_NAME)
 	}
@@ -161,11 +215,12 @@ public class I18nFieldsTransformation implements ASTTransformation {
 		return null != classNode.getDeclaredField(field)
 	}
 
-	private void addTransientsField(ClassNode classNode) {
-		def transients = new FieldNode(TRANSIENTS_DEFINITION_FIELD_NAME, ACC_PUBLIC | ACC_STATIC, new ClassNode(Object.class), classNode, new ListExpression())
+	private def addStaticField(String fieldName, Expression initialExpression, ClassNode classNode) {
+		def field = new FieldNode(fieldName, ACC_PUBLIC | ACC_STATIC, new ClassNode(Object.class), classNode, initialExpression)
 		// TODO: Use log4j
-		println "[i18n_fields] Adding transients static field to ${classNode.name}"
-		classNode.addField(transients)
+		println "[i18n_fields] Adding ${fieldName} static field to ${classNode.name}"
+		field.setDeclaringClass(classNode)
+		classNode.addField(field)
 	}
 
 	private addProxyGetter(String field, ClassNode classNode) {
@@ -176,20 +231,20 @@ if (${LOCALES_DEFINITION_FIELD_NAME}.containsKey(locale.language) && !${LOCALES_
 	locale = new Locale(locale.language)
 return this.\"${field}_\${locale}\"
 """
-		def codeBlock = new AstBuilder().buildFromString(code).pop()
+		def blockStatement = new AstBuilder().buildFromString(code).pop()
 		// TODO: Use log4j
 		println "[i18n_fields] Adding '${methodName}()' proxy method to ${classNode.name}"
-		classNode.addMethod(getNewMethod(methodName, [] as Parameter[], codeBlock))
+		classNode.addMethod(getNewMethod(methodName, [] as Parameter[], blockStatement))
 	}
 
 	private addProxySetter(String field, ClassNode classNode) {
 		def methodName = GrailsClassUtils.getSetterName(field)
 		def code = "this.\"${field}_\${org.springframework.context.i18n.LocaleContextHolder.getLocale()}\" = value"
-		def codeBlock = new AstBuilder().buildFromString(code).pop()
+		def blockStatement = new AstBuilder().buildFromString(code).pop()
 		def parameters = [new Parameter(ClassHelper.make(String, false), "value")] as Parameter[]
 		// TODO: Use log4j
 		println "[i18n_fields] Adding '${methodName}(String value)' proxy method to ${classNode.name}"
-		classNode.addMethod(getNewMethod(methodName, parameters as Parameter[], codeBlock))
+		classNode.addMethod(getNewMethod(methodName, parameters as Parameter[], blockStatement))
 	}
 
 	private addLocalizedGetter(String field, ClassNode classNode) {
@@ -199,9 +254,9 @@ if (${LOCALES_DEFINITION_FIELD_NAME}.containsKey(locale.language) && !${LOCALES_
 	locale = new Locale(locale.language)
 return this.\"${field}_\${locale}\"
 """
-		def codeBlock = new AstBuilder().buildFromString(code).pop()
+		def blockStatement = new AstBuilder().buildFromString(code).pop()
 		def parameters = [new Parameter(ClassHelper.make(Locale, false), "locale")] as Parameter[]
-		classNode.addMethod(getNewMethod(methodName, parameters, codeBlock))
+		classNode.addMethod(getNewMethod(methodName, parameters, blockStatement))
 		// TODO: Use log4j
 		println "[i18n_fields] Adding '${methodName}(Locale locale)' helper method to ${classNode.name}"
 	}
@@ -209,12 +264,12 @@ return this.\"${field}_\${locale}\"
 	private addLocalizedSetter(String field, ClassNode classNode) {
 		def methodName = GrailsClassUtils.getSetterName(field)
 		def code = "this.\"${field}_\${locale}\" = value"
-		def codeBlock = new AstBuilder().buildFromString(code).pop()
+		def blockStatement = new AstBuilder().buildFromString(code).pop()
 		def parameters = [
 				new Parameter(ClassHelper.make(String, false), "value"),
 				new Parameter(ClassHelper.make(Locale, false), "locale")
 		] as Parameter[]
-		classNode.addMethod(getNewMethod(methodName, parameters, codeBlock))
+		classNode.addMethod(getNewMethod(methodName, parameters, blockStatement))
 		// TODO: Use log4j
 		println "[i18n_fields] Adding '${methodName}(String value, Locale locale)' helper method to ${classNode.name}"
 	}

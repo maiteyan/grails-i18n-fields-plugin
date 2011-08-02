@@ -108,11 +108,20 @@ class I18nFieldsTransformationTests {
 	}
 
 	@Test
-	void "Adds nullable constraint to localized fields if original is nullable"() {
-        def tester = new ConstraintsTester()
-        def constraints = chuchu.constraints
-        def constraintsMethods = tester.test(constraints)
+	void "Adds any constraint from the original field to localized versions"() {
+		def tester = new ConstraintsTester()
+		def constraints = chuchu.constraints
+		def constraintsMethods = tester.test(constraints)
 		assertThat constraintsMethods.name_es?.nullable, is(true)
+		assertThat constraintsMethods.name_es_MX?.min, is(5)
+	}
+
+	@Test
+	void "Avoids overwriting constraints for localized fields if they are already defined in the original field"() {
+		def tester = new ConstraintsTester()
+		def constraints = chuchu.constraints
+		def constraintsMethods = tester.test(constraints)
+		assertThat constraintsMethods.name_en_US?.min, is(10)
 	}
 
 	private def createBlabla() {
@@ -125,7 +134,7 @@ class I18nFieldsTransformationTests {
 
 	private def createInstanceFromFile(String filePath) {
 		def file = new File(filePath)
-		def invoker = new TranformTestHelper(new I18nFieldsTransformation(), CompilePhase.CANONICALIZATION)
+		TranformTestHelper invoker = new TranformTestHelper(new I18nFieldsTransformation(), CompilePhase.CANONICALIZATION)
 		def clazz = invoker.parse(file)
 		return clazz.newInstance()
 	}

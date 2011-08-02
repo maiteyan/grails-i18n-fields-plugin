@@ -4,3 +4,4 @@ stacktrace.log
 out
 .idea
 plugin.xml
+cobertura.ser

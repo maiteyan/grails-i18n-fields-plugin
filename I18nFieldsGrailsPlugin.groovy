@@ -10,6 +10,7 @@ class I18nFieldsGrailsPlugin {
 	def grailsVersion = "1.3 > *"
 	def dependsOn = [:]
 	def pluginExcludes = [
+			"lib/*",
 			"grails-app/i18n/*",
 			"grails-app/controllers/i18nfields/*",
 			"grails-app/services/i18nfields/*",

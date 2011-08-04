@@ -1,8 +1,12 @@
 package i18nfields
 
 /**
- * author: jneira (http://twitter.com/jneira)
- * link: http://meetspock.appspot.com/script/35001
+ * Author: Javier Neira Sánchez
+ * Source: http://meetspock.appspot.com/script/35001
+ * Links:  http://javierneirasanchez.blogspot.com/
+ *         http://twitter.com/jneira
+ *
+ * Thanks Javier!
  */
 class ConstraintsTester {
     def methodsCalled = [:]
@@ -11,7 +15,7 @@ class ConstraintsTester {
         methodsCalled << [(name): args[0]]
     }
 
-    def test(constraints) {
+    def test(Closure constraints) {
         this.with constraints
         methodsCalled
     }

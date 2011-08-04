@@ -2,6 +2,7 @@ import org.codehaus.groovy.grails.commons.*
 import org.apache.log4j.Logger
 
 import i18nfields.*
+import grails.util.GrailsUtil
 
 class I18nFieldsGrailsPlugin {
 	static final def log = Logger.getLogger(I18nFieldsGrailsPlugin)
@@ -12,6 +13,7 @@ class I18nFieldsGrailsPlugin {
 	def pluginExcludes = [
 			"lib/*",
 			"grails-app/i18n/*",
+			"grails-app/domain/i18nfields/*",
 			"grails-app/controllers/i18nfields/*",
 			"grails-app/services/i18nfields/*",
 			"grails-app/taglib/i18nfields/*",
@@ -36,7 +38,7 @@ class I18nFieldsGrailsPlugin {
 		['controller', 'service', 'tagLib', 'codec', 'bootstrap'].each {
 			application."${it}Classes".each { theClass ->
 				// TODO: Use log4j
-				println "[i18n_fields] Adding 'withLocale' method to ${theClass.name} ${it} Class"
+				println "[i18nFields] Adding 'withLocale' method to ${theClass.name} ${it} Class"
 				theClass.metaClass.withLocale = I18nFieldsHelper.withLocale
 			}
 		}

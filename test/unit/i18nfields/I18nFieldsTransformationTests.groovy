@@ -7,23 +7,13 @@ import static org.hamcrest.CoreMatchers.not
 import static org.junit.matchers.JUnitMatchers.hasItem
 import org.codehaus.groovy.tools.ast.TranformTestHelper
 import org.codehaus.groovy.control.CompilePhase
-import org.codehaus.groovy.grails.commons.ConfigurationHolder
-import org.junit.BeforeClass
 import org.junit.Before
 import org.springframework.context.i18n.LocaleContextHolder
+import groovy.mock.interceptor.MockFor
 
 class I18nFieldsTransformationTests {
 	def chuchu
 	def blabla
-
-	@BeforeClass
-	static void "Mock locale configuration"() {
-		ConfigurationHolder configurationHolder = new ConfigurationHolder()
-		ConfigObject config = new ConfigObject()
-		configurationHolder.setConfig(config)
-		ConfigurationHolder.config.i18n_fields.locales = ["es", "es_MX", "en_US", "kl_KL"]
-		I18nFieldsTransformation.metaClass.ConfigurationHolder = configurationHolder
-	}
 
 	@Before
 	void "Create our test instances"() {
@@ -41,6 +31,11 @@ class I18nFieldsTransformationTests {
 	@Test
 	void "Ignores invalid locales like Klingon"() {
 		assertThat blabla.metaClass.properties*.name, not(hasItem("name_kl_KL"))
+	}
+
+	@Test
+	void "Ignores non existant fields like cocotero"() {
+		assertThat blabla.metaClass.properties*.name, not(hasItem("cocotero_es"))
 	}
 
 	@Test
@@ -133,9 +128,13 @@ class I18nFieldsTransformationTests {
 	}
 
 	private def createInstanceFromFile(String filePath) {
-		def file = new File(filePath)
-		TranformTestHelper invoker = new TranformTestHelper(new I18nFieldsTransformation(), CompilePhase.CANONICALIZATION)
-		def clazz = invoker.parse(file)
+		def mockedConfigProvider = new MockFor(ConfigProvider)
+		mockedConfigProvider.ignore.getConfig() { [i18nFields: [locales: ["es", "es_MX", "en_US", "kl_KL"]]] }
+		def clazz
+		mockedConfigProvider.use() {
+			TranformTestHelper invoker = new TranformTestHelper(new I18nFieldsTransformation(), CompilePhase.CANONICALIZATION)
+			clazz = invoker.parse(new File(filePath))
+		}
 		return clazz.newInstance()
 	}
 

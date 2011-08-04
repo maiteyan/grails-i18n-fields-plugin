@@ -4,7 +4,7 @@ package i18nfields
 class ChuChu {
 	def name
 	def description
-	static i18n_fields = ["name", "description"]
+	static i18nFields = ["name", "description"]
 	static constraints = {
 		name(nullable:true,min:5)
 		name_en_US(min:10)
